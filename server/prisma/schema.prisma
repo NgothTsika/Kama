@@ -1,6 +1,5 @@
-// This is your Prisma schema file,
+// This is your Prisma schema file
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
@@ -12,3 +11,496 @@ datasource db {
   provider = "postgresql"
 }
 
+// 🌍 LANGUAGE & COUNTRY
+model Language {
+  code String @id
+  name String
+
+  users    User[]
+  contents LocalizedContent[]
+}
+
+model Country {
+  code String @id
+  name String
+
+  users              User[]
+  leaderboardEntries LeaderboardEntry[]
+}
+
+// 👤 USER + HEART + PREMIUM
+
+model User {
+  id         String @id @default(uuid())
+  supabaseId String @unique
+
+  username        String?
+  email           String?
+  avatarUrl       String?
+  // 🌍 Preferences
+  languageCode    String?
+  countryCode     String?
+  autoDetect      Boolean   @default(true)
+  // 🎮 Progress
+  level           Int       @default(1)
+  xp              Int       @default(0)
+  coins           Int       @default(0)
+  rank            Rank      @default(BRONZE)
+  // ❤️ Hearts system
+  hearts          Int       @default(5)
+  maxHearts       Int       @default(5)
+  lastHeartRefill DateTime?
+  // 💎 Premium
+  isPremium       Boolean   @default(false)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  // relations
+  language  Language? @relation(fields: [languageCode], references: [code])
+  country   Country?  @relation(fields: [countryCode], references: [code])
+
+  matches            MatchPlayer[]
+  achievements       UserAchievement[]
+  lessonProgress     UserLessonProgress[]
+  pathProgress       UserPathProgress[]
+  reviews            Review[]
+  heartLogs          HeartLog[]
+  xpLogs             XpLog[]
+  leaderboardEntries LeaderboardEntry[]
+
+  daily         UserDaily?
+  subscriptions Subscription[]
+}
+
+enum Rank {
+  BRONZE
+  SILVER
+  GOLD
+  DIAMOND
+  LEGEND
+}
+
+// 🎁 DAILY REWARD & STREAK
+model DailyReward {
+  id String @id @default(uuid())
+
+  day         Int
+  xpReward    Int
+  coinReward  Int
+  heartReward Int?
+
+  createdAt DateTime @default(now())
+}
+
+model UserDaily {
+  id String @id @default(uuid())
+
+  userId        String    @unique
+  lastClaimDate DateTime?
+  streak        Int       @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// ❤️ HEART LOG
+model HeartLog {
+  id String @id @default(uuid())
+
+  userId String
+  change Int
+  reason String
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// 💎 SUBSCRIPTION
+model Subscription {
+  id String @id @default(uuid())
+
+  userId String
+  type   SubscriptionType
+  status SubscriptionStatus
+
+  startDate DateTime
+  endDate   DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum SubscriptionType {
+  FREE
+  PREMIUM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+// 📚 LEARNING SYSTEM
+model LearningPath {
+  id          String  @id @default(uuid())
+  title       String
+  description String?
+  imageUrl    String?
+
+  difficulty  Int     @default(1)
+  isPublished Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  lessons  Lesson[]
+  progress UserPathProgress[]
+}
+
+model Lesson {
+  id String @id @default(uuid())
+
+  title    String
+  summary  String
+  content  String
+  imageUrl String?
+  audioUrl String?
+
+  order    Int
+  xpReward Int @default(50)
+
+  pathId String
+  path   LearningPath @relation(fields: [pathId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  figures    LessonFigure[]
+  questions  LessonQuestion[]
+  flashcards Flashcard[]
+  progress   UserLessonProgress[]
+}
+
+// 🧑‍🏫 FIGURES + ADVANCED CATEGORY SYSTEM
+model Figure {
+  id String @id @default(uuid())
+
+  name  String
+  title String?
+  bio   String
+
+  birthYear Int?
+  deathYear Int?
+
+  imageUrl String?
+
+  createdAt DateTime @default(now())
+
+  lessons    LessonFigure[]
+  categories FigureCategory[]
+}
+
+// 🌳 FLEXIBLE CATEGORY TREE (VERY POWERFUL)
+model Category {
+  id   String @id @default(uuid())
+  name String
+
+  parentId String?
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+
+  createdAt DateTime @default(now())
+
+  figures   FigureCategory[]
+  questions QuestionCategory[]
+}
+
+// 🔗 FIGURE ↔ CATEGORY
+model FigureCategory {
+  figureId   String
+  categoryId String
+
+  figure   Figure   @relation(fields: [figureId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@id([figureId, categoryId])
+}
+
+// 🔗 LESSON ↔ FIGURE (added missing model)
+model LessonFigure {
+  lessonId String
+  figureId String
+
+  lesson Lesson @relation(fields: [lessonId], references: [id])
+  figure Figure @relation(fields: [figureId], references: [id])
+
+  @@id([lessonId, figureId])
+}
+
+// ❓ QUESTIONS
+model Question {
+  id         String @id @default(uuid())
+  text       String
+  difficulty Int    @default(1)
+
+  imageUrl    String?
+  explanation String?
+
+  createdAt DateTime @default(now())
+
+  answers    Answer[]
+  categories QuestionCategory[]
+  lessons    LessonQuestion[]
+  matchLinks MatchQuestion[]
+}
+
+model Answer {
+  id        String  @id @default(uuid())
+  text      String
+  isCorrect Boolean @default(false)
+
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
+}
+
+model QuestionCategory {
+  questionId String
+  categoryId String
+
+  question Question @relation(fields: [questionId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@id([questionId, categoryId])
+}
+
+model LessonQuestion {
+  lessonId   String
+  questionId String
+
+  lesson   Lesson   @relation(fields: [lessonId], references: [id])
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@id([lessonId, questionId])
+}
+
+// 🌐 LOCALIZATION
+model LocalizedContent {
+  id String @id @default(uuid())
+
+  languageCode String
+  entityType   ContentType
+  entityId     String
+
+  title   String?
+  content String?
+  summary String?
+
+  language Language @relation(fields: [languageCode], references: [code])
+
+  @@index([entityType, entityId])
+}
+
+enum ContentType {
+  LESSON
+  QUESTION
+  FIGURE
+}
+
+// 🧠 FLASHCARDS
+model Flashcard {
+  id String @id @default(uuid())
+
+  question String
+  answer   String
+
+  lessonId String
+  lesson   Lesson @relation(fields: [lessonId], references: [id])
+
+  reviews Review[]
+}
+
+model Review {
+  id String @id @default(uuid())
+
+  userId      String
+  flashcardId String
+
+  interval   Int      @default(1)
+  nextReview DateTime
+
+  user      User      @relation(fields: [userId], references: [id])
+  flashcard Flashcard @relation(fields: [flashcardId], references: [id])
+}
+
+// 📊 PROGRESS
+model UserLessonProgress {
+  id String @id @default(uuid())
+
+  userId   String
+  lessonId String
+
+  completed   Boolean   @default(false)
+  score       Int?
+  completedAt DateTime?
+
+  user   User   @relation(fields: [userId], references: [id])
+  lesson Lesson @relation(fields: [lessonId], references: [id])
+
+  @@unique([userId, lessonId])
+}
+
+model UserPathProgress {
+  id String @id @default(uuid())
+
+  userId String
+  pathId String
+
+  progress  Float   @default(0)
+  completed Boolean @default(false)
+
+  user User         @relation(fields: [userId], references: [id])
+  path LearningPath @relation(fields: [pathId], references: [id])
+
+  @@unique([userId, pathId])
+}
+
+// 🎮 GAME SYSTEM
+model Match {
+  id     String      @id @default(uuid())
+  mode   GameMode
+  status MatchStatus @default(WAITING)
+
+  maxPlayers Int
+  createdAt  DateTime  @default(now())
+  startedAt  DateTime?
+  endedAt    DateTime?
+
+  players   MatchPlayer[]
+  questions MatchQuestion[]
+}
+
+enum GameMode {
+  SOLO
+  DUEL
+  TEAM
+}
+
+enum MatchStatus {
+  WAITING
+  IN_PROGRESS
+  FINISHED
+  CANCELLED
+}
+
+model MatchPlayer {
+  id String @id @default(uuid())
+
+  userId  String
+  matchId String
+
+  score    Int      @default(0)
+  team     Int?
+  isWinner Boolean?
+
+  joinedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  match Match @relation(fields: [matchId], references: [id])
+
+  answers PlayerAnswer[]
+
+  @@unique([userId, matchId])
+}
+
+model MatchQuestion {
+  id String @id @default(uuid())
+
+  matchId    String
+  questionId String
+
+  order     Int
+  startedAt DateTime?
+  endedAt   DateTime?
+
+  match    Match    @relation(fields: [matchId], references: [id])
+  question Question @relation(fields: [questionId], references: [id])
+
+  answers PlayerAnswer[]
+}
+
+model PlayerAnswer {
+  id String @id @default(uuid())
+
+  playerId        String
+  matchQuestionId String
+  answerId        String
+
+  isCorrect      Boolean
+  responseTimeMs Int
+
+  createdAt DateTime @default(now())
+
+  player        MatchPlayer   @relation(fields: [playerId], references: [id])
+  matchQuestion MatchQuestion @relation(fields: [matchQuestionId], references: [id])
+}
+
+// 🏆 LEADERBOARD
+model LeaderboardEntry {
+  id String @id @default(uuid())
+
+  userId String
+  xp     Int
+
+  weekStart DateTime
+  weekEnd   DateTime
+
+  countryCode String?
+
+  createdAt DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id])
+  country Country? @relation(fields: [countryCode], references: [code])
+
+  @@index([weekStart, countryCode])
+}
+
+model WeeklyReward {
+  id String @id @default(uuid())
+
+  rankMin Int
+  rankMax Int
+
+  xpReward   Int
+  coinReward Int
+}
+
+// 🏅 ACHIEVEMENTS
+model Achievement {
+  id          String  @id @default(uuid())
+  title       String
+  description String
+  icon        String?
+
+  users UserAchievement[]
+}
+
+model UserAchievement {
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id])
+  achievement Achievement @relation(fields: [achievementId], references: [id])
+
+  @@id([userId, achievementId])
+}
+
+model XpLog {
+  id     String @id @default(uuid())
+  userId String
+
+  amount Int
+  reason String
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
